@@ -7,6 +7,7 @@ pub enum InputMode {
     Find,
     Filter,
     FilterColumns,
+    ColumnPicker,
     FreezeColumns,
     Option,
     Help,

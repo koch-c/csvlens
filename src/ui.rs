@@ -1157,7 +1157,7 @@ impl FilterColumnsState {
 }
 
 pub struct FilterColumnsInfo {
-    pattern: Regex,
+    pattern: Option<Regex>,
     shown: usize,
     total: usize,
     disabled_because_no_match: bool,
@@ -1166,7 +1166,10 @@ pub struct FilterColumnsInfo {
 impl FilterColumnsInfo {
     fn status_line(&self) -> String {
         let mut line;
-        line = format!("[Filter \"{}\": ", self.pattern);
+        line = match &self.pattern {
+            Some(pattern) => format!("[Filter \"{pattern}\": "),
+            None => "[Columns: ".to_string(),
+        };
         if self.disabled_because_no_match {
             line += "no match, showing all columns]";
         } else {
