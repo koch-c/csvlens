@@ -31,6 +31,14 @@ pub enum Control {
     FindLikeCell,
     Filter(String),
     FilterColumns(String),
+    OpenColumnPicker,
+    ColumnPickerQuery(Input),
+    ColumnPickerUp,
+    ColumnPickerDown,
+    ColumnPickerToggle,
+    ColumnPickerSelectMatches(bool),
+    ColumnPickerApply,
+    ColumnPickerCancel,
     FilterLikeCell,
     FreezeColumns(usize),
     Quit,
@@ -159,6 +167,10 @@ impl InputHandler {
                     self.init_buffer(InputMode::FilterColumns);
                     Control::empty_buffer()
                 }
+                KeyCode::Char('c') => {
+                    self.init_buffer(InputMode::ColumnPicker);
+                    Control::OpenColumnPicker
+                }
                 KeyCode::Char('-') => {
                     self.init_buffer(InputMode::Option);
                     Control::empty_buffer()
@@ -211,6 +223,9 @@ impl InputHandler {
         };
         if self.mode == InputMode::Option {
             return self.handler_buffering_option_mode(key_event);
+        }
+        if self.mode == InputMode::ColumnPicker {
+            return self.handler_column_picker(key_event);
         }
         match key_event.code {
             KeyCode::Esc => {
@@ -296,6 +311,39 @@ impl InputHandler {
                     return control;
                 }
                 Control::Nothing
+            }
+        }
+    }
+
+    fn handler_column_picker(&mut self, key_event: KeyEvent) -> Control {
+        let input = match &mut self.buffer_state {
+            BufferState::Active(input) => input,
+            BufferState::Inactive => return Control::Nothing,
+        };
+        match key_event.code {
+            KeyCode::Esc => {
+                self.reset_buffer();
+                Control::ColumnPickerCancel
+            }
+            KeyCode::Enter => {
+                self.reset_buffer();
+                Control::ColumnPickerApply
+            }
+            KeyCode::Up => Control::ColumnPickerUp,
+            KeyCode::Down => Control::ColumnPickerDown,
+            KeyCode::Tab => Control::ColumnPickerToggle,
+            KeyCode::Char('a') if key_event.modifiers == KeyModifiers::CONTROL => {
+                Control::ColumnPickerSelectMatches(true)
+            }
+            KeyCode::Char('d') if key_event.modifiers == KeyModifiers::CONTROL => {
+                Control::ColumnPickerSelectMatches(false)
+            }
+            _ => {
+                if input.handle_event(&Event::Key(key_event)).is_some() {
+                    Control::ColumnPickerQuery(input.clone())
+                } else {
+                    Control::Nothing
+                }
             }
         }
     }

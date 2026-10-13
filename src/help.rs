@@ -33,6 +33,7 @@ n (in Find mode)        : Jump to next result
 N (in Find mode)        : Jump to previous result
 &<regex>                : Filter rows using regex (show only matches)
 *<regex>                : Filter columns using regex (show only matches)
+c                       : Select visible columns with a searchable picker
 
 # Selection modes
 

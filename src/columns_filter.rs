@@ -2,7 +2,7 @@ use regex::Regex;
 
 #[derive(Debug)]
 pub struct ColumnsFilter {
-    pattern: Regex,
+    pattern: Option<Regex>,
     indices: Vec<usize>,
     filtered_headers: Vec<String>,
     filtered_flags: Vec<bool>,
@@ -33,12 +33,28 @@ impl ColumnsFilter {
             disabled_because_no_match = false;
         }
         Self {
-            pattern,
+            pattern: Some(pattern),
             indices,
             filtered_headers,
             filtered_flags,
             num_columns_before_filter: headers.len(),
             disabled_because_no_match,
+        }
+    }
+
+    pub fn from_indices(indices: Vec<usize>, headers: &[String]) -> Self {
+        let filtered_headers = indices.iter().map(|&i| headers[i].clone()).collect();
+        let mut filtered_flags = vec![false; headers.len()];
+        for &index in &indices {
+            filtered_flags[index] = true;
+        }
+        Self {
+            pattern: None,
+            indices,
+            filtered_headers,
+            filtered_flags,
+            num_columns_before_filter: headers.len(),
+            disabled_because_no_match: false,
         }
     }
 
@@ -50,8 +66,8 @@ impl ColumnsFilter {
         &self.indices
     }
 
-    pub fn pattern(&self) -> Regex {
-        self.pattern.to_owned()
+    pub fn pattern(&self) -> Option<Regex> {
+        self.pattern.clone()
     }
 
     pub fn num_filtered(&self) -> usize {

@@ -1,5 +1,6 @@
 extern crate csv_nose;
 
+use crate::column_picker::{ColumnPicker, ColumnPickerState};
 use crate::columns_filter::ColumnsFilter;
 use crate::csv;
 use crate::delimiter::{Delimiter, sniff_delimiter};
@@ -183,6 +184,8 @@ pub struct App {
     sorter: Option<Arc<sort::Sorter>>,
     sort_order: SortOrder,
     wrap_mode: WrapMode,
+    column_picker: Option<ColumnPickerState>,
+    column_picker_query: String,
     #[cfg(feature = "clipboard")]
     clipboard: Result<Clipboard>,
     _seekable_file: SeekableFile,
@@ -288,6 +291,8 @@ impl App {
             sorter: None,
             sort_order: SortOrder::Ascending,
             wrap_mode: WrapMode::default(),
+            column_picker: None,
+            column_picker_query: String::new(),
             #[cfg(feature = "clipboard")]
             clipboard,
             _seekable_file: seekable_file,
@@ -491,6 +496,59 @@ impl App {
             }
             Control::FilterColumns(pat) => {
                 self.set_columns_filter(pat);
+            }
+            Control::OpenColumnPicker => {
+                let selected = self
+                    .columns_filter
+                    .as_ref()
+                    .map(|filter| filter.indices().clone())
+                    .unwrap_or_else(|| (0..self.rows_view.raw_headers().len()).collect());
+                self.column_picker = Some(ColumnPickerState::new(
+                    self.rows_view.raw_headers(),
+                    selected,
+                ));
+                self.column_picker_query.clear();
+            }
+            Control::ColumnPickerQuery(input) => {
+                self.column_picker_query = input.value().to_string();
+                if let Some(picker) = &mut self.column_picker {
+                    picker.reset_cursor(&self.column_picker_query);
+                }
+            }
+            Control::ColumnPickerUp => {
+                if let Some(picker) = &mut self.column_picker {
+                    picker.move_cursor(&self.column_picker_query, -1);
+                }
+            }
+            Control::ColumnPickerDown => {
+                if let Some(picker) = &mut self.column_picker {
+                    picker.move_cursor(&self.column_picker_query, 1);
+                }
+            }
+            Control::ColumnPickerToggle => {
+                if let Some(picker) = &mut self.column_picker {
+                    picker.toggle_current(&self.column_picker_query);
+                }
+            }
+            Control::ColumnPickerSelectMatches(selected) => {
+                if let Some(picker) = &mut self.column_picker {
+                    picker.select_matches(&self.column_picker_query, *selected);
+                }
+            }
+            Control::ColumnPickerApply => {
+                if let Some(picker) = self.column_picker.take() {
+                    let indices = picker.selected_indices();
+                    if indices.is_empty() {
+                        self.transient_message = Some("Select at least one column".to_string());
+                    } else {
+                        self.set_columns_filter_indices(indices);
+                    }
+                }
+                self.column_picker_query.clear();
+            }
+            Control::ColumnPickerCancel => {
+                self.column_picker = None;
+                self.column_picker_query.clear();
             }
             Control::FreezeColumns(num_cols) => {
                 self.rows_view.set_cols_offset_num_freeze(*num_cols as u64);
@@ -853,6 +911,35 @@ impl App {
             .set_cols_offset(ColumnsOffset::default());
     }
 
+    fn set_columns_filter_indices(&mut self, indices: Vec<usize>) {
+        let columns_filter = Arc::new(ColumnsFilter::from_indices(
+            indices,
+            self.rows_view.raw_headers(),
+        ));
+        self.columns_filter = Some(columns_filter.clone());
+        self.rows_view.set_columns_filter(&columns_filter).unwrap();
+        self.csv_table_state.reset_buffer();
+        self.csv_table_state
+            .set_cols_offset(ColumnsOffset::default());
+        self.refresh_finder_for_columns();
+    }
+
+    fn refresh_finder_for_columns(&mut self) {
+        if let Some(finder) = &self.finder {
+            let target = finder.target().clone();
+            let is_filter = self.rows_view.is_filter();
+            let column_index = finder.column_index();
+            let starting_row_index = finder.starting_row_index();
+            self.create_finder_with_params(
+                target,
+                is_filter,
+                column_index,
+                starting_row_index,
+                None,
+            );
+        }
+    }
+
     fn reset_columns_filter(&mut self) {
         self.columns_filter = None;
         self.rows_view.reset_columns_filter().unwrap();
@@ -983,10 +1070,20 @@ impl App {
 
         // Re-apply columns filter if any
         if let Some(columns_filter) = &self.columns_filter {
-            let columns_filter = Arc::new(ColumnsFilter::new(
-                columns_filter.pattern(),
-                self.rows_view.raw_headers(),
-            ));
+            let columns_filter = if let Some(pattern) = columns_filter.pattern() {
+                Arc::new(ColumnsFilter::new(pattern, self.rows_view.raw_headers()))
+            } else {
+                let indices = columns_filter
+                    .indices()
+                    .iter()
+                    .copied()
+                    .filter(|index| *index < self.rows_view.raw_headers().len())
+                    .collect();
+                Arc::new(ColumnsFilter::from_indices(
+                    indices,
+                    self.rows_view.raw_headers(),
+                ))
+            };
             self.columns_filter = Some(columns_filter.clone());
             self.rows_view.set_columns_filter(&columns_filter).unwrap();
         }
@@ -1094,6 +1191,9 @@ impl App {
         let rows = self.rows_view.rows();
         let csv_table = CsvTable::new(self.rows_view.headers(), rows);
         f.render_stateful_widget(csv_table, size, &mut self.csv_table_state);
+        if let Some(picker) = &mut self.column_picker {
+            f.render_stateful_widget(ColumnPicker::new(&self.column_picker_query), size, picker);
+        }
         if let Some((x, y)) = self.csv_table_state.cursor_xy {
             f.set_cursor_position(Position::new(x, y));
         }
@@ -1374,6 +1474,28 @@ mod tests {
         let actual_buffer = terminal.backend().buffer().clone();
         let lines = to_lines(&actual_buffer);
         assert_eq!(lines, expected);
+    }
+
+    #[test]
+    fn test_column_picker_applies_explicit_selection() {
+        let mut app = AppBuilder::new("tests/data/cities.csv").build().unwrap();
+        till_app_ready(&app);
+
+        app.step(&Control::OpenColumnPicker).unwrap();
+        app.step(&Control::ColumnPickerQuery("City".into()))
+            .unwrap();
+        app.step(&Control::ColumnPickerSelectMatches(false))
+            .unwrap();
+        app.step(&Control::ColumnPickerApply).unwrap();
+
+        assert_eq!(app.rows_view.headers().len(), 9);
+        assert!(
+            !app.rows_view
+                .headers()
+                .iter()
+                .any(|header| header.name == "City")
+        );
+        assert!(app.columns_filter.as_ref().unwrap().pattern().is_none());
     }
 
     #[test]
