@@ -1,5 +1,7 @@
 # csvlens
 
+> **Note:** This is a fork of the amazing [YS-L/csvlens](https://github.com/YS-L/csvlens) tool. It contains purely vibe coded extensions I find useful. 
+
 `csvlens` is a command line CSV file viewer. It is like `less` but made
 for CSV.
 
