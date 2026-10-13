@@ -105,6 +105,12 @@ fn fuzzy_score(candidate: &str, query: &str) -> Option<usize> {
     None
 }
 
+fn visible_start(cursor: usize, visible_rows: usize, total_rows: usize) -> usize {
+    cursor
+        .saturating_sub(visible_rows / 2)
+        .min(total_rows.saturating_sub(visible_rows))
+}
+
 pub struct ColumnPicker<'a> {
     query: &'a str,
 }
@@ -131,7 +137,7 @@ impl StatefulWidget for ColumnPicker<'_> {
         let matches = state.matching_indices(self.query);
         state.reset_cursor(self.query);
         let available = popup.height.saturating_sub(4) as usize;
-        let start = state.cursor.saturating_sub(available.saturating_sub(1));
+        let start = visible_start(state.cursor, available, matches.len());
         let mut lines = vec![Line::from(format!(
             "Search: {}  ({}/{} selected)",
             self.query,
@@ -165,7 +171,7 @@ impl StatefulWidget for ColumnPicker<'_> {
             lines.push(Line::from("  No matching columns"));
         }
         lines.push(Line::from(
-            "Tab toggle • Enter apply • Esc cancel • Ctrl+A/Ctrl+D all/none",
+            "Tab toggle • Enter apply • Esc cancel • Ctrl+A/D all/none",
         ));
         let block = Block::default()
             .title(" Select columns ")
@@ -186,5 +192,12 @@ mod tests {
         assert_eq!(picker.matching_indices("fn"), vec![0]);
         picker.toggle_current("ln");
         assert_eq!(picker.selected_indices(), vec![0, 1]);
+    }
+
+    #[test]
+    fn keeps_cursor_near_middle_of_visible_rows() {
+        assert_eq!(visible_start(55, 16, 123), 47);
+        assert_eq!(visible_start(2, 16, 123), 0);
+        assert_eq!(visible_start(122, 16, 123), 107);
     }
 }
