@@ -171,7 +171,7 @@ impl StatefulWidget for ColumnPicker<'_> {
             lines.push(Line::from("  No matching columns"));
         }
         lines.push(Line::from(
-            "Tab toggle • Enter apply • Esc cancel • Ctrl+A/D all/none",
+            "Ctrl+L toggle • Enter apply • Esc cancel • Ctrl+A/D all/none",
         ));
         let block = Block::default()
             .title(" Select columns ")

@@ -337,7 +337,9 @@ impl InputHandler {
             KeyCode::Char('j') if key_event.modifiers == KeyModifiers::CONTROL => {
                 Control::ColumnPickerDown
             }
-            KeyCode::Tab => Control::ColumnPickerToggle,
+            KeyCode::Char('l') if key_event.modifiers == KeyModifiers::CONTROL => {
+                Control::ColumnPickerToggle
+            }
             KeyCode::Char('a') if key_event.modifiers == KeyModifiers::CONTROL => {
                 Control::ColumnPickerSelectMatches(true)
             }
